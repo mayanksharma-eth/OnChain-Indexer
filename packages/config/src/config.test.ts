@@ -1,0 +1,97 @@
+import { describe, expect, it } from "vitest";
+import { loadIndexerConfig } from "./indexer.js";
+import { loadApiConfig } from "./api.js";
+
+const validEnv = {
+  NODE_ENV: "test",
+  RPC_URL: "https://eth.llamarpc.com",
+  CHAIN_ID: "1",
+  INDEXER_START_BLOCK: "100",
+  INDEXER_CHUNK_SIZE: "500",
+  INDEXER_POLL_INTERVAL_MS: "2000",
+  CONFIRMATIONS: "3",
+  DATABASE_URL: "postgres://postgres:postgres@localhost:5432/onchain_indexer",
+  REDIS_URL: "redis://localhost:6379",
+  API_PORT: "3000",
+  LOG_LEVEL: "info",
+};
+
+describe("loadIndexerConfig", () => {
+  it("parses a valid environment into typed config", () => {
+    const config = loadIndexerConfig(validEnv);
+    expect(config.RPC_URL).toBe(validEnv.RPC_URL);
+    expect(config.CHAIN_ID).toBe(1);
+    expect(config.INDEXER_START_BLOCK).toBe(100);
+    expect(config.INDEXER_CHUNK_SIZE).toBe(500);
+    expect(config.INDEXER_POLL_INTERVAL_MS).toBe(2000);
+    expect(config.CONFIRMATIONS).toBe(3);
+  });
+
+  it("applies sensible development defaults when optional vars are omitted", () => {
+    const { RPC_URL, DATABASE_URL, REDIS_URL } = validEnv;
+    const config = loadIndexerConfig({ RPC_URL, DATABASE_URL, REDIS_URL });
+    expect(config.NODE_ENV).toBe("development");
+    expect(config.CHAIN_ID).toBe(31337);
+    expect(config.INDEXER_START_BLOCK).toBe(0);
+    expect(config.INDEXER_CHUNK_SIZE).toBe(2000);
+    expect(config.INDEXER_POLL_INTERVAL_MS).toBe(4000);
+    expect(config.CONFIRMATIONS).toBe(5);
+    expect(config.LOG_LEVEL).toBe("info");
+  });
+
+  it("fails clearly when RPC_URL is missing", () => {
+    const { RPC_URL: _RPC_URL, ...rest } = validEnv;
+    expect(() => loadIndexerConfig(rest)).toThrowError(/RPC_URL/);
+  });
+
+  it("fails when CHAIN_ID is invalid", () => {
+    expect(() => loadIndexerConfig({ ...validEnv, CHAIN_ID: "not-a-number" })).toThrowError(
+      /CHAIN_ID/,
+    );
+    expect(() => loadIndexerConfig({ ...validEnv, CHAIN_ID: "-1" })).toThrowError(/CHAIN_ID/);
+  });
+
+  it("fails when numeric fields are invalid", () => {
+    expect(() =>
+      loadIndexerConfig({ ...validEnv, INDEXER_CHUNK_SIZE: "not-a-number" }),
+    ).toThrowError(/INDEXER_CHUNK_SIZE/);
+    expect(() => loadIndexerConfig({ ...validEnv, CONFIRMATIONS: "-3" })).toThrowError(
+      /CONFIRMATIONS/,
+    );
+    expect(() =>
+      loadIndexerConfig({ ...validEnv, INDEXER_POLL_INTERVAL_MS: "0" }),
+    ).toThrowError(/INDEXER_POLL_INTERVAL_MS/);
+  });
+
+  it("fails when DATABASE_URL or REDIS_URL are missing", () => {
+    const { DATABASE_URL: _DATABASE_URL, ...rest } = validEnv;
+    expect(() => loadIndexerConfig(rest)).toThrowError(/DATABASE_URL/);
+  });
+});
+
+describe("loadApiConfig", () => {
+  it("parses a valid environment and omits indexer-only fields", () => {
+    const config = loadApiConfig(validEnv);
+    expect(config.API_PORT).toBe(3000);
+    expect("RPC_URL" in config).toBe(false);
+    expect("CHAIN_ID" in config).toBe(false);
+  });
+
+  it("applies a sensible default API_PORT", () => {
+    const { DATABASE_URL, REDIS_URL } = validEnv;
+    const config = loadApiConfig({ DATABASE_URL, REDIS_URL });
+    expect(config.API_PORT).toBe(3000);
+  });
+
+  it("fails when API_PORT is out of range", () => {
+    expect(() => loadApiConfig({ ...validEnv, API_PORT: "70000" })).toThrowError(/API_PORT/);
+    expect(() => loadApiConfig({ ...validEnv, API_PORT: "not-a-number" })).toThrowError(
+      /API_PORT/,
+    );
+  });
+
+  it("fails clearly when DATABASE_URL is missing", () => {
+    const { DATABASE_URL: _DATABASE_URL, ...rest } = validEnv;
+    expect(() => loadApiConfig(rest)).toThrowError(/DATABASE_URL/);
+  });
+});

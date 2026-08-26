@@ -1,0 +1,34 @@
+{
+  "name": "onchain-indexer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.14.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @onchain-indexer/api dev",
+    "dev:indexer": "pnpm --filter @onchain-indexer/indexer dev",
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "typecheck": "pnpm -r typecheck && tsc --noEmit -p tests/tsconfig.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "postinstall": "pnpm --filter './packages/**' build"
+  },
+  "dependencies": {
+    "@onchain-indexer/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.8",
+    "eslint": "^9.18.0",
+    "typescript-eslint": "^8.20.0",
+    "@eslint/js": "^9.18.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "@types/node": "^22.10.5"
+  }
+}

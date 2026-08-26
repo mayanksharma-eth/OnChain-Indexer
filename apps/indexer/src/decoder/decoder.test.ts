@@ -81,6 +81,7 @@ describe("decodeIntentLog", () => {
         transactionIndex: 1,
         logIndex: 2,
         removed: false,
+        topics: encoded.topics,
       },
     });
     // normalized to EIP-55 checksum casing, not the raw lowercase input

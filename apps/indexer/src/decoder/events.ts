@@ -9,6 +9,8 @@ export interface RawLogMeta {
   transactionIndex: number | null;
   logIndex: number | null;
   removed: boolean;
+  /** topics[0] is the event signature hash; kept for persistence without re-touching the ABI. */
+  topics: readonly Hex[];
 }
 
 export interface IntentCreatedEvent {
@@ -56,5 +58,6 @@ export function toRawLogMeta(log: Log): RawLogMeta {
     transactionIndex: log.transactionIndex,
     logIndex: log.logIndex,
     removed: log.removed,
+    topics: log.topics,
   };
 }

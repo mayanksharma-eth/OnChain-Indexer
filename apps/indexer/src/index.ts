@@ -2,8 +2,7 @@ import { loadIndexerConfig } from "@onchain-indexer/config";
 import { logger } from "@onchain-indexer/utils";
 import { createDb } from "@onchain-indexer/database";
 import { createRpcClient } from "./rpc/index.js";
-import { runIndexingPipeline } from "./pipeline/index.js";
-import { loadStartBlock } from "./checkpoint/index.js";
+import { runIndexerLoop } from "./loop/index.js";
 
 const INDEXER_NAME = "events";
 
@@ -12,41 +11,27 @@ async function main() {
   const db = createDb(config.DATABASE_URL);
   const client = await createRpcClient({ rpcUrl: config.RPC_URL, chainId: config.CHAIN_ID });
 
-  let shuttingDown = false;
-  const requestShutdown = () => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    logger.info("shutdown requested, finishing current range then exiting");
+  const controller = new AbortController();
+  const requestShutdown = (signal: string) => {
+    if (controller.signal.aborted) return;
+    logger.info("shutdown requested, finishing current cycle then exiting", { signal });
+    controller.abort();
   };
-  process.once("SIGINT", requestShutdown);
-  process.once("SIGTERM", requestShutdown);
+  process.once("SIGINT", () => requestShutdown("SIGINT"));
+  process.once("SIGTERM", () => requestShutdown("SIGTERM"));
 
   try {
-    const identity = { chainId: config.CHAIN_ID, indexerName: INDEXER_NAME };
-    const startBlock = await loadStartBlock(db, identity, config.INDEXER_START_BLOCK);
-
-    const latest = await client.getLatestBlock();
-    if (latest.number === null) throw new Error("latest block has no number (pending block?)");
-    const endBlock = Number(latest.number) - config.CONFIRMATIONS;
-
-    if (startBlock > endBlock) {
-      logger.info("nothing to index yet", { startBlock, endBlock });
-      return;
-    }
-
-    logger.info("indexing", { chainId: config.CHAIN_ID, startBlock, endBlock });
-    for await (const result of runIndexingPipeline(
+    await runIndexerLoop({
       client,
       db,
-      config.CHAIN_ID,
-      startBlock,
-      endBlock,
-      config.INDEXER_CHUNK_SIZE,
-      { indexerName: INDEXER_NAME },
-    )) {
-      logger.info("indexed range", { ...result });
-      if (shuttingDown) break;
-    }
+      chainId: config.CHAIN_ID,
+      indexerName: INDEXER_NAME,
+      startBlock: config.INDEXER_START_BLOCK,
+      chunkSize: config.INDEXER_CHUNK_SIZE,
+      confirmations: config.CONFIRMATIONS,
+      pollIntervalMs: config.INDEXER_POLL_INTERVAL_MS,
+      signal: controller.signal,
+    });
   } finally {
     await db.$client.end();
     logger.info("shut down cleanly");

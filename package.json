@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "pnpm --filter @onchain-indexer/api dev",
     "dev:indexer": "pnpm --filter @onchain-indexer/indexer dev",
+    "db:generate": "pnpm --filter @onchain-indexer/database db:generate",
+    "db:migrate": "pnpm --filter @onchain-indexer/database db:migrate",
     "build": "pnpm -r build",
     "test": "vitest run",
     "typecheck": "pnpm -r typecheck && tsc --noEmit -p tests/tsconfig.json",

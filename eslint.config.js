@@ -24,7 +24,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["*.js", "*.ts", "tests/**/*.ts"],
+    files: ["*.js", "*.ts", "tests/**/*.ts", "**/drizzle.config.ts"],
     extends: [tseslint.configs.disableTypeChecked],
   },
   eslintConfigPrettier,

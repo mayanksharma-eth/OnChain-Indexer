@@ -62,6 +62,8 @@ docker compose down
 | ------------------ | ----------------------------- |
 | `pnpm dev`         | Run the API in watch mode     |
 | `pnpm dev:indexer` | Run the indexer placeholder   |
+| `pnpm db:generate` | Generate a SQL migration from the schema |
+| `pnpm db:migrate`  | Apply pending migrations to `DATABASE_URL` |
 | `pnpm build`       | Build all packages and apps   |
 | `pnpm test`        | Run the test suite (vitest)   |
 | `pnpm typecheck`   | Type-check all workspaces     |

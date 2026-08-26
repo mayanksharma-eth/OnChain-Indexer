@@ -57,6 +57,9 @@ importers:
 
   apps/indexer:
     dependencies:
+      '@onchain-indexer/abi':
+        specifier: workspace:*
+        version: link:../../packages/abi
       '@onchain-indexer/config':
         specifier: workspace:*
         version: link:../../packages/config

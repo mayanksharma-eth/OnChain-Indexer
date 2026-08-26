@@ -70,17 +70,24 @@ describe("loadIndexerConfig", () => {
 });
 
 describe("loadApiConfig", () => {
-  it("parses a valid environment and omits indexer-only fields", () => {
+  it("parses a valid environment, keeping CHAIN_ID but omitting indexer-only fields", () => {
     const config = loadApiConfig(validEnv);
     expect(config.API_PORT).toBe(3000);
+    expect(config.CHAIN_ID).toBe(1);
     expect("RPC_URL" in config).toBe(false);
-    expect("CHAIN_ID" in config).toBe(false);
   });
 
-  it("applies a sensible default API_PORT", () => {
+  it("applies sensible defaults for API_PORT and CHAIN_ID", () => {
     const { DATABASE_URL, REDIS_URL } = validEnv;
     const config = loadApiConfig({ DATABASE_URL, REDIS_URL });
     expect(config.API_PORT).toBe(3000);
+    expect(config.CHAIN_ID).toBe(31337);
+  });
+
+  it("fails when CHAIN_ID is invalid", () => {
+    expect(() => loadApiConfig({ ...validEnv, CHAIN_ID: "not-a-number" })).toThrowError(
+      /CHAIN_ID/,
+    );
   });
 
   it("fails when API_PORT is out of range", () => {

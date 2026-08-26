@@ -96,7 +96,9 @@ describe("indexing pipeline", () => {
 
     const results = await collect(runIndexingPipeline(client, db, chainId, 500, 500, 500));
 
-    expect(results).toEqual([{ fromBlock: 500, toBlock: 500, blocksProcessed: 1, eventsProcessed: 1 }]);
+    expect(results).toEqual([
+      { fromBlock: 500, toBlock: 500, blocksProcessed: 1, eventsProcessed: 1, intentsIndexed: 1, fillsIndexed: 0 },
+    ]);
 
     const block = await getBlock(db, chainId, 500);
     expect(block).toMatchObject({
@@ -145,7 +147,9 @@ describe("indexing pipeline", () => {
     const secondEvent = await getEvent(db, chainId, TX_HASH, 7);
     const secondBlock = await getBlock(db, chainId, 500);
 
-    expect(results).toEqual([{ fromBlock: 500, toBlock: 500, blocksProcessed: 1, eventsProcessed: 1 }]);
+    expect(results).toEqual([
+      { fromBlock: 500, toBlock: 500, blocksProcessed: 1, eventsProcessed: 1, intentsIndexed: 1, fillsIndexed: 0 },
+    ]);
     // same row identity, not a second insert
     expect(secondEvent?.id).toBe(firstEvent?.id);
     expect(secondBlock).toEqual(firstBlock);

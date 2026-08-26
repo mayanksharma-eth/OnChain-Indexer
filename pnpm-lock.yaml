@@ -51,9 +51,18 @@ importers:
       '@onchain-indexer/utils':
         specifier: workspace:*
         version: link:../../packages/utils
+      drizzle-orm:
+        specifier: ^0.38.3
+        version: 0.38.4(postgres@3.4.9)
       fastify:
         specifier: ^5.2.0
         version: 5.12.1
+      viem:
+        specifier: ^2.21.54
+        version: 2.55.19(typescript@5.9.3)(zod@3.25.76)
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
 
   apps/indexer:
     dependencies:

@@ -1,14 +1,16 @@
 import { loadIndexerConfig } from "@onchain-indexer/config";
 import { logger } from "@onchain-indexer/utils";
-import { createDb } from "@onchain-indexer/database";
+import { createDb, createRedis } from "@onchain-indexer/database";
 import { createRpcClient } from "./rpc/index.js";
 import { runIndexerLoop } from "./loop/index.js";
+import { indexerStatus } from "./status/index.js";
 
 const INDEXER_NAME = "events";
 
 async function main() {
   const config = loadIndexerConfig();
   const db = createDb(config.DATABASE_URL);
+  const redis = createRedis(config.REDIS_URL);
   const client = await createRpcClient({ rpcUrl: config.RPC_URL, chainId: config.CHAIN_ID });
 
   const controller = new AbortController();
@@ -24,6 +26,7 @@ async function main() {
     await runIndexerLoop({
       client,
       db,
+      redis,
       chainId: config.CHAIN_ID,
       indexerName: INDEXER_NAME,
       startBlock: config.INDEXER_START_BLOCK,
@@ -33,7 +36,9 @@ async function main() {
       signal: controller.signal,
     });
   } finally {
+    logger.info("final indexer status", { ...indexerStatus.getSnapshot() });
     await db.$client.end();
+    await redis.quit();
     logger.info("shut down cleanly");
   }
 }

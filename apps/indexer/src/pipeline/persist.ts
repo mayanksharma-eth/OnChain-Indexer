@@ -58,6 +58,8 @@ function toNewEvent(chainId: number, event: DecodedIntentEvent): NewEvent {
 export interface PersistResult {
   blocksProcessed: number;
   eventsProcessed: number;
+  intentsIndexed: number;
+  fillsIndexed: number;
 }
 
 function findCheckpointBlock(fetched: FetchedBlockRange): ViemBlock {
@@ -89,12 +91,16 @@ export async function persistFetchedRange(
   fetched: FetchedBlockRange,
 ): Promise<PersistResult> {
   return db.transaction(async (tx) => {
+    let intentsIndexed = 0;
+    let fillsIndexed = 0;
     for (const block of fetched.blocks) {
       await insertBlock(tx, toNewBlock(chainId, block));
     }
     for (const event of fetched.events) {
       await insertEvent(tx, toNewEvent(chainId, event));
-      await processDecodedEvent(tx, chainId, event);
+      const projected = await processDecodedEvent(tx, chainId, event);
+      if (projected.eventName === "IntentCreated") intentsIndexed++;
+      if (projected.eventName === "IntentFilled") fillsIndexed++;
     }
     const checkpointBlock = findCheckpointBlock(fetched);
     await advanceCheckpoint(
@@ -102,6 +108,11 @@ export async function persistFetchedRange(
       { chainId, indexerName },
       { blockNumber: fetched.range.toBlock, blockHash: checkpointBlock.hash as string },
     );
-    return { blocksProcessed: fetched.blocks.length, eventsProcessed: fetched.events.length };
+    return {
+      blocksProcessed: fetched.blocks.length,
+      eventsProcessed: fetched.events.length,
+      intentsIndexed,
+      fillsIndexed,
+    };
   });
 }

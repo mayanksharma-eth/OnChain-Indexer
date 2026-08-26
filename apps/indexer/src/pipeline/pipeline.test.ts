@@ -1,10 +1,11 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, getAddress, keccak256, toHex, type Abi, type AbiEvent, type Block, type Log } from "viem";
 import { intentAbi } from "@onchain-indexer/abi";
-import { createChain, getBlock, getEvent } from "@onchain-indexer/database";
+import { createChain, getBlock, getCheckpoint, getEvent } from "@onchain-indexer/database";
 import type { RpcClient } from "../rpc/client.js";
 import { runIndexingPipeline } from "./pipeline.js";
 import { persistFetchedRange } from "./persist.js";
+import { loadStartBlock } from "../checkpoint/checkpoint-service.js";
 import type { FetchedBlockRange } from "../fetcher/fetcher.js";
 import { db, randomChainId, setupTestDb } from "./test-setup.js";
 
@@ -162,7 +163,44 @@ describe("indexing pipeline", () => {
       events: [],
     };
 
-    await expect(persistFetchedRange(db, chainId, fetched)).rejects.toThrow();
+    await expect(persistFetchedRange(db, chainId, "events", fetched)).rejects.toThrow();
     expect(await getBlock(db, chainId, 1)).toBeUndefined();
+  });
+});
+
+describe("checkpointing", () => {
+  it("advances the checkpoint to the range's end block and hash after a successful range", async () => {
+    const chainId = randomChainId();
+    const client = fakeClient();
+
+    await collect(runIndexingPipeline(client, db, chainId, 500, 500, 500));
+
+    const checkpoint = await getCheckpoint(db, chainId, "events");
+    expect(checkpoint).toMatchObject({ lastProcessedBlock: 500, lastProcessedBlockHash: BLOCK_HASH });
+  });
+
+  it("does not advance the checkpoint when a range fails to commit", async () => {
+    const chainId = randomChainId();
+    await createChain(db, { chainId, name: `chain-${chainId}` });
+    // Same block height twice within the range -> violates canonical uniqueness and rolls back.
+    const failingRange: FetchedBlockRange = {
+      range: { fromBlock: 1000, toBlock: 1499 },
+      blocks: [fakeBlock({ number: 1000n, hash: "0xaaaa" }), fakeBlock({ number: 1000n, hash: "0xbbbb" })],
+      events: [],
+    };
+
+    await expect(persistFetchedRange(db, chainId, "events", failingRange)).rejects.toThrow();
+
+    expect(await getCheckpoint(db, chainId, "events")).toBeUndefined();
+  });
+
+  it("on restart, resumes indexing from the block after the last saved checkpoint", async () => {
+    const chainId = randomChainId();
+    const client = fakeClient();
+
+    await collect(runIndexingPipeline(client, db, chainId, 500, 500, 500));
+
+    const resumeFrom = await loadStartBlock(db, { chainId, indexerName: "events" }, 0);
+    expect(resumeFrom).toBe(501);
   });
 });

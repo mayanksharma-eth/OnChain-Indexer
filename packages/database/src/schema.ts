@@ -87,6 +87,15 @@ export const events = pgTable(
   ],
 );
 
+/** Lifecycle states for an intent's domain status. See apps/indexer/src/projection for the
+ * transition rules that assign these. */
+export const IntentStatus = {
+  OPEN: "OPEN",
+  CANCELLED: "CANCELLED",
+  FILLED: "FILLED",
+} as const;
+export type IntentStatusValue = (typeof IntentStatus)[keyof typeof IntentStatus];
+
 export const intents = pgTable(
   "intents",
   {
@@ -101,7 +110,7 @@ export const intents = pgTable(
     amountIn: numeric("amount_in", { precision: 78, scale: 0 }).notNull(),
     minAmountOut: numeric("min_amount_out", { precision: 78, scale: 0 }).notNull(),
     deadline: bigint("deadline", { mode: "number" }).notNull(),
-    status: text("status").notNull().default("pending"),
+    status: text("status").notNull().default(IntentStatus.OPEN),
     createdBlock: bigint("created_block", { mode: "number" }).notNull(),
     createdTxHash: text("created_tx_hash").notNull(),
     updatedBlock: bigint("updated_block", { mode: "number" }),

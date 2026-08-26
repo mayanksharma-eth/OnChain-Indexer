@@ -1,0 +1,1 @@
+ALTER TABLE "intents" ALTER COLUMN "status" SET DEFAULT 'OPEN';

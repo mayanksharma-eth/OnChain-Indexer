@@ -32,8 +32,11 @@ function sortLogs(logs: readonly Log[]): Log[] {
 async function fetchOneRange(client: RpcClient, range: BlockRange): Promise<FetchedBlockRange> {
   const logs = sortLogs(await client.getLogs(range.fromBlock, range.toBlock));
 
-  const blockNumbers = [...new Set(logs.map((log) => log.blockNumber).filter((n): n is bigint => n !== null))].sort(
-    (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+  // Always include the range's own toBlock, even if no logs landed in it — checkpointing
+  // needs that block's hash to record how far this range advanced.
+  const logBlockNumbers = logs.map((log) => log.blockNumber).filter((n): n is bigint => n !== null);
+  const blockNumbers = [...new Set([...logBlockNumbers, BigInt(range.toBlock)])].sort((a, b) =>
+    a < b ? -1 : a > b ? 1 : 0,
   );
   const blocks = await Promise.all(blockNumbers.map((n) => client.getBlock(n)));
 

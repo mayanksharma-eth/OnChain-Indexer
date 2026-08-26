@@ -37,7 +37,7 @@ async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
 }
 
 describe("fetchBlockRanges", () => {
-  it("fetches logs and only the block metadata those logs reference, per range, in order", async () => {
+  it("fetches logs plus the block metadata those logs reference, per range, in order", async () => {
     const getLogs = vi
       .fn()
       .mockResolvedValueOnce([fakeLog({ blockNumber: 1001n, logIndex: 1 }), fakeLog({ blockNumber: 1000n, logIndex: 0 })])
@@ -51,12 +51,13 @@ describe("fetchBlockRanges", () => {
     expect(results[0]!.range).toEqual({ fromBlock: 1000, toBlock: 1499 });
     expect(results[1]!.range).toEqual({ fromBlock: 1500, toBlock: 1999 });
 
-    // deterministic ordering: logs sorted by blockNumber then logIndex, blocks deduped+sorted
-    expect(results[0]!.blocks.map((b) => b.number)).toEqual([1000n, 1001n]);
-    expect(getBlock).toHaveBeenCalledTimes(2);
+    // deterministic ordering: logs sorted by blockNumber then logIndex, blocks deduped+sorted,
+    // and the range's own toBlock (1499) is always included even though no log landed there
+    expect(results[0]!.blocks.map((b) => b.number)).toEqual([1000n, 1001n, 1499n]);
 
-    // second range had no logs, so no block metadata fetched
-    expect(results[1]!.blocks).toEqual([]);
+    // second range had no logs, but its toBlock is still fetched for checkpointing
+    expect(results[1]!.blocks.map((b) => b.number)).toEqual([1999n]);
+    expect(getBlock).toHaveBeenCalledTimes(4);
 
     expect(getLogs.mock.calls).toEqual([
       [1000, 1499],

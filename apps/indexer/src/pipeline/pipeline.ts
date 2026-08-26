@@ -7,6 +7,8 @@ import { persistFetchedRange, type PersistResult } from "./persist.js";
 export interface RunIndexingPipelineOptions extends FetchBlockRangesOptions {
   /** Name to register the chain under if it isn't already known. Default: "chain-{chainId}". */
   chainName?: string;
+  /** Checkpoint identity for this indexing stream. Default: "events". */
+  indexerName?: string;
 }
 
 export interface IndexedRangeResult extends PersistResult {
@@ -20,8 +22,9 @@ async function ensureChain(db: Database, chainId: number, name: string): Promise
 }
 
 /**
- * RPC -> block range fetcher -> event decoder -> Postgres, one range at a time.
- * Does not touch intent domain state or checkpoints — persistence only.
+ * RPC -> block range fetcher -> event decoder -> Postgres, one range at a time. Each range's raw
+ * events, projected domain state (intents/fills), and checkpoint advance together in one
+ * transaction — see persistFetchedRange.
  */
 export async function* runIndexingPipeline(
   client: RpcClient,
@@ -33,9 +36,10 @@ export async function* runIndexingPipeline(
   options: RunIndexingPipelineOptions = {},
 ): AsyncGenerator<IndexedRangeResult> {
   await ensureChain(db, chainId, options.chainName ?? `chain-${chainId}`);
+  const indexerName = options.indexerName ?? "events";
 
   for await (const fetched of fetchBlockRanges(client, startBlock, endBlock, chunkSize, options)) {
-    const result = await persistFetchedRange(db, chainId, fetched);
+    const result = await persistFetchedRange(db, chainId, indexerName, fetched);
     yield { ...result, fromBlock: fetched.range.fromBlock, toBlock: fetched.range.toBlock };
   }
 }

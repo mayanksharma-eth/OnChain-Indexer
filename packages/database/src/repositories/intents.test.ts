@@ -25,17 +25,21 @@ function intent(overrides: Partial<Parameters<typeof createIntent>[1]> = {}) {
 }
 
 describe("intents repository", () => {
-  it("creates an intent with a default pending status", async () => {
+  it("creates an intent with a default OPEN status", async () => {
     await createIntent(db, intent());
 
     const found = await getIntent(db, 1, "0xintent1");
-    expect(found?.status).toBe("pending");
+    expect(found?.status).toBe("OPEN");
     expect(found?.amountIn).toBe("1000000000000000000");
   });
 
-  it("rejects a duplicate (chain_id, intent_id)", async () => {
-    await createIntent(db, intent());
-    await expect(createIntent(db, intent())).rejects.toThrow();
+  it("is idempotent: re-creating the same (chain_id, intent_id) returns the existing row", async () => {
+    const first = await createIntent(db, intent());
+    const second = await createIntent(db, intent());
+
+    expect(second.id).toBe(first.id);
+    const all = await listIntentsByOwner(db, 1, "0xowner");
+    expect(all).toHaveLength(1);
   });
 
   it("lists intents by owner", async () => {
@@ -46,11 +50,11 @@ describe("intents repository", () => {
     expect(owned.map((i) => i.intentId)).toEqual(["0xintent1"]);
   });
 
-  it("lists only open (pending) intents", async () => {
+  it("lists only OPEN intents", async () => {
     await createIntent(db, intent({ intentId: "0xintent1" }));
     await createIntent(db, intent({ intentId: "0xintent2" }));
     await updateIntentStatus(db, 1, "0xintent1", {
-      status: "filled",
+      status: "FILLED",
       updatedBlock: 105,
       updatedTxHash: "0xtx2",
     });

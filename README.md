@@ -24,6 +24,36 @@ scripts/      # one-off scripts
 ```bash
 pnpm install
 cp .env.example .env
+docker compose up -d
+```
+
+## Local infrastructure
+
+`docker-compose.yml` provides PostgreSQL and Redis for local development
+(no indexer/API containers — those run with `pnpm dev`).
+
+```bash
+docker compose up -d
+```
+
+Check both services are healthy:
+
+```bash
+docker compose ps
+```
+
+`STATUS` should show `healthy` for both `postgres` and `redis`. To check
+manually:
+
+```bash
+docker compose exec postgres pg_isready -U postgres -d indexer
+docker compose exec redis redis-cli ping   # expects PONG
+```
+
+Stop the stack (data persists in named volumes):
+
+```bash
+docker compose down
 ```
 
 ## Scripts

@@ -120,8 +120,12 @@ export const intents = pgTable(
   },
   (table) => [
     unique("intents_chain_intent_key").on(table.chainId, table.intentId),
-    index("intents_chain_owner_idx").on(table.chainId, table.owner),
-    index("intents_chain_status_idx").on(table.chainId, table.status),
+    // `id` trails each filter column so listIntents' cursor pagination (WHERE ... AND id > cursor
+    // ORDER BY id LIMIT n) is satisfied entirely by the index — no separate sort, no scanning past
+    // non-matching rows to find the next page.
+    index("intents_chain_owner_idx").on(table.chainId, table.owner, table.id),
+    index("intents_chain_status_idx").on(table.chainId, table.status, table.id),
+    index("intents_chain_token_pair_idx").on(table.chainId, table.tokenIn, table.tokenOut, table.id),
   ],
 );
 
@@ -149,7 +153,8 @@ export const fills = pgTable(
       columns: [table.chainId, table.intentId],
       foreignColumns: [intents.chainId, intents.intentId],
     }),
-    index("fills_chain_intent_idx").on(table.chainId, table.intentId),
+    // `id` trails so listFillsByIntent's ORDER BY id is satisfied by the index directly.
+    index("fills_chain_intent_idx").on(table.chainId, table.intentId, table.id),
     index("fills_chain_solver_idx").on(table.chainId, table.solver),
   ],
 );

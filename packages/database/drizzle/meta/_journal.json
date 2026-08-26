@@ -15,6 +15,13 @@
       "when": 1787739236253,
       "tag": "0001_workable_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787770518121,
+      "tag": "0002_mysterious_natasha_romanoff",
+      "breakpoints": true
     }
   ]
 }

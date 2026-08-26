@@ -1,6 +1,7 @@
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 import type { Database } from "@onchain-indexer/database";
+import { apiRequestDuration, apiRequestsTotal, metricsRegistry } from "@onchain-indexer/utils";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerIntentRoutes } from "./routes/intents.js";
 import { registerAddressRoutes } from "./routes/addresses.js";
@@ -59,6 +60,21 @@ export function buildApp({ db, redis, logLevel, state, chainId, nodeEnv = "produ
         code: "internal_error",
       },
     });
+  });
+
+  app.addHook("onResponse", (request, reply, done) => {
+    // request.routeOptions.url is the route pattern (e.g. "/intents/:intentId"), not the literal
+    // path — labeling by the resolved path would blow up cardinality with every intentId seen.
+    const route = request.routeOptions.url ?? "unmatched";
+    const labels = { method: request.method, route, status_code: String(reply.statusCode) };
+    apiRequestsTotal.inc(labels);
+    apiRequestDuration.observe(labels, reply.elapsedTime / 1000);
+    done();
+  });
+
+  app.get("/metrics", async (_request, reply) => {
+    reply.header("content-type", metricsRegistry.contentType);
+    return metricsRegistry.metrics();
   });
 
   app.register(

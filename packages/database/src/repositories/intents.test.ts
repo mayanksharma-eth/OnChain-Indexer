@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { db, setupTestDb } from "./test-setup.js";
 import { createChain } from "./chains.js";
-import { createIntent, getIntent, listIntentsByOwner, listOpenIntents, updateIntentStatus } from "./intents.js";
+import { createIntent, getIntent, listIntents, updateIntentStatus } from "./intents.js";
 
 beforeEach(async () => {
   await setupTestDb();
@@ -38,7 +38,7 @@ describe("intents repository", () => {
     const second = await createIntent(db, intent());
 
     expect(second.id).toBe(first.id);
-    const all = await listIntentsByOwner(db, 1, "0xowner");
+    const all = await listIntents(db, 1, { owner: "0xowner", limit: 20 });
     expect(all).toHaveLength(1);
   });
 
@@ -46,7 +46,7 @@ describe("intents repository", () => {
     await createIntent(db, intent({ intentId: "0xintent1", owner: "0xowner" }));
     await createIntent(db, intent({ intentId: "0xintent2", owner: "0xother" }));
 
-    const owned = await listIntentsByOwner(db, 1, "0xowner");
+    const owned = await listIntents(db, 1, { owner: "0xowner", limit: 20 });
     expect(owned.map((i) => i.intentId)).toEqual(["0xintent1"]);
   });
 
@@ -59,7 +59,7 @@ describe("intents repository", () => {
       updatedTxHash: "0xtx2",
     });
 
-    const open = await listOpenIntents(db, 1);
+    const open = await listIntents(db, 1, { status: "OPEN", limit: 20 });
     expect(open.map((i) => i.intentId)).toEqual(["0xintent2"]);
   });
 });

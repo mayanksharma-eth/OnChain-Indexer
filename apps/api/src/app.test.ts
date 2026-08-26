@@ -95,6 +95,20 @@ describe("GET /api/v1/ready", () => {
   });
 });
 
+describe("GET /metrics", () => {
+  it("exposes request counters and duration in Prometheus text format", async () => {
+    const app = buildApp({ db: fakeDb(), redis: null, logLevel: "error", state: { initialized: true }, chainId: 1 });
+    await app.inject({ method: "GET", url: "/api/v1/health" });
+    const response = await app.inject({ method: "GET", url: "/metrics" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/plain");
+    expect(response.body).toContain("api_requests_total");
+    expect(response.body).toContain("api_request_duration_seconds");
+    expect(response.body).toContain('route="/api/v1/health"');
+  });
+});
+
 describe("error handling", () => {
   it("returns a consistent JSON envelope for unknown routes", async () => {
     const app = buildApp({ db: fakeDb(), redis: null, logLevel: "error", state: { initialized: true }, chainId: 1 });

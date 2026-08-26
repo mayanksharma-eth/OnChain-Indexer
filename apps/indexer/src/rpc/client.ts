@@ -1,4 +1,5 @@
 import { createPublicClient, http, type Block, type Hash, type Log, type PublicClient } from "viem";
+import { indexerRpcErrorsTotal } from "@onchain-indexer/utils";
 import { ChainIdMismatchError } from "./errors.js";
 import { withRetry } from "./retry.js";
 
@@ -33,7 +34,12 @@ export async function createRpcClient(
   const baseDelayMs = config.baseDelayMs ?? 200;
 
   function call<T>(method: string, fn: () => Promise<T>): Promise<T> {
-    return withRetry(fn, { method, maxRetries, baseDelayMs });
+    return withRetry(fn, {
+      method,
+      maxRetries,
+      baseDelayMs,
+      onError: () => indexerRpcErrorsTotal.inc({ chain_id: config.chainId, method }),
+    });
   }
 
   const client: RpcClient = {

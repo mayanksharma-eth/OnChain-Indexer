@@ -77,24 +77,6 @@ export async function reopenIntentsUpdatedFromBlock(
     .returning();
 }
 
-export async function listOpenIntents(db: DbOrTx, chainId: number): Promise<Intent[]> {
-  return db
-    .select()
-    .from(intents)
-    .where(and(eq(intents.chainId, chainId), eq(intents.status, IntentStatus.OPEN)));
-}
-
-export async function listIntentsByOwner(
-  db: DbOrTx,
-  chainId: number,
-  owner: string,
-): Promise<Intent[]> {
-  return db
-    .select()
-    .from(intents)
-    .where(and(eq(intents.chainId, chainId), eq(intents.owner, owner)));
-}
-
 export interface ListIntentsFilters {
   status?: IntentStatusValue;
   owner?: string;

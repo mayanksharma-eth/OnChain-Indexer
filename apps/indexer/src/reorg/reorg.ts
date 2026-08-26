@@ -1,5 +1,5 @@
 import { getBlock, markEventsNonCanonical, markNonCanonical, type Database } from "@onchain-indexer/database";
-import { logger } from "@onchain-indexer/utils";
+import { indexerReorgsTotal, logger } from "@onchain-indexer/utils";
 import type { RpcClient } from "../rpc/client.js";
 import { advanceCheckpoint } from "../checkpoint/checkpoint-service.js";
 import { rollbackProjectionsFromBlock } from "../projection/rollback.js";
@@ -69,6 +69,7 @@ export async function handleReorg(
   const affectedFrom = ancestor.blockNumber + 1;
 
   logger.warn("REORG DETECTED", { chainId, indexerName, divergentBlockNumber, ancestorBlock: ancestor.blockNumber });
+  indexerReorgsTotal.inc({ chain_id: chainId });
 
   await db.transaction(async (tx) => {
     const blocks = await markNonCanonical(tx, chainId, affectedFrom);

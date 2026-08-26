@@ -1,5 +1,11 @@
 import { createRedis, getCheckpoint, invalidateChainCache, type Database } from "@onchain-indexer/database";
-import { logger } from "@onchain-indexer/utils";
+import {
+  indexerBlockLag,
+  indexerBlocksProcessedTotal,
+  indexerEventsProcessedTotal,
+  indexerProcessingDuration,
+  logger,
+} from "@onchain-indexer/utils";
 import type { RpcClient } from "../rpc/client.js";
 import { runIndexingPipeline } from "../pipeline/index.js";
 import { loadStartBlock } from "../checkpoint/index.js";
@@ -92,20 +98,25 @@ export async function runIndexerLoop(options: IndexerLoopOptions): Promise<void>
           eventsProcessed += result.eventsProcessed;
           indexedBlock = result.toBlock;
           await invalidateChainCache(redis, chainId);
+          const durationMs = Date.now() - chunkStart;
           logger.info("indexing operation complete", {
             chainId,
             fromBlock: result.fromBlock,
             toBlock: result.toBlock,
             eventsFound: result.eventsProcessed,
             eventsInserted: result.eventsProcessed,
-            duration: Date.now() - chunkStart,
+            duration: durationMs,
           });
+          indexerBlocksProcessedTotal.inc({ chain_id: chainId }, result.blocksProcessed);
+          indexerEventsProcessedTotal.inc({ chain_id: chainId }, result.eventsProcessed);
+          indexerProcessingDuration.observe({ chain_id: chainId }, durationMs / 1000);
           status.recordIndexed({ events: result.eventsProcessed, intents: result.intentsIndexed, fills: result.fillsIndexed });
           chunkStart = Date.now();
           if (signal.aborted) break;
         }
       }
 
+      indexerBlockLag.set({ chain_id: chainId }, latestBlock - indexedBlock);
       status.recordProgress({ chainHead: latestBlock, safeBlock, indexedBlock });
       status.setState(indexedBlock >= safeBlock ? "CAUGHT_UP" : "SYNCING");
 

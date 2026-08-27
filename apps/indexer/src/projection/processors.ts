@@ -39,6 +39,17 @@ export async function processIntentCreated(
   event: IntentCreatedEvent,
 ): Promise<Intent> {
   const { blockNumber, transactionHash } = requireBlockMeta(event.eventName, event.raw);
+  const { deadline } = event.args;
+  // `deadline` is a uint256 on-chain but stored as a plain number (it's meant to hold a unix
+  // timestamp). A contract that emits something outside the safe-integer range — malicious or
+  // buggy — would otherwise silently lose precision or overflow into Infinity on insert. Reject
+  // it explicitly instead: the surrounding transaction rolls back (see pipeline/persist.ts) and
+  // the range is retried next poll rather than persisting a corrupted deadline.
+  if (deadline < 0n || deadline > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new ProjectionError(
+      `IntentCreated ${event.args.intentId} has an out-of-range deadline (${deadline.toString()})`,
+    );
+  }
   return createIntent(tx, {
     chainId,
     intentId: event.args.intentId,
@@ -47,7 +58,7 @@ export async function processIntentCreated(
     tokenOut: event.args.tokenOut,
     amountIn: event.args.amountIn.toString(),
     minAmountOut: event.args.minAmountOut.toString(),
-    deadline: Number(event.args.deadline),
+    deadline: Number(deadline),
     status: IntentStatus.OPEN,
     createdBlock: blockNumber,
     createdTxHash: transactionHash,

@@ -1,4 +1,4 @@
-import { createPublicClient, http, type Block, type Hash, type Log, type PublicClient } from "viem";
+import { createPublicClient, http, type Address, type Block, type Hash, type Log, type PublicClient } from "viem";
 import { indexerRpcErrorsTotal } from "@onchain-indexer/utils";
 import { ChainIdMismatchError } from "./errors.js";
 import { withRetry } from "./retry.js";
@@ -6,6 +6,9 @@ import { withRetry } from "./retry.js";
 export interface RpcClientConfig {
   rpcUrl: string;
   chainId: number;
+  /** The only contract this client's getLogs will ever return logs for — scopes every
+   * eth_getLogs call so the indexer never ingests events from unrelated contracts. */
+  contractAddress: Address;
   /** Number of retries after the initial attempt. Default: 5. */
   maxRetries?: number;
   /** Base delay for exponential backoff, in ms. Default: 200. */
@@ -49,7 +52,13 @@ export async function createRpcClient(
       call("getBlock", () => publicClient.getBlock({ blockNumber: BigInt(blockNumber) })),
     getBlockByHash: (hash) => call("getBlockByHash", () => publicClient.getBlock({ blockHash: hash })),
     getLogs: (fromBlock, toBlock) =>
-      call("getLogs", () => publicClient.getLogs({ fromBlock: BigInt(fromBlock), toBlock: BigInt(toBlock) })),
+      call("getLogs", () =>
+        publicClient.getLogs({
+          address: config.contractAddress,
+          fromBlock: BigInt(fromBlock),
+          toBlock: BigInt(toBlock),
+        }),
+      ),
   };
 
   const actualChainId = await client.getChainId();

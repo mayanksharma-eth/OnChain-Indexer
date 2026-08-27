@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,6 +29,62 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # One-shot: applies pending Drizzle migrations, then exits. api/indexer wait for this to
+  # succeed before starting (depends_on: condition: service_completed_successfully below).
+  migrate:
+    build: .
+    command: ["node", "packages/database/dist/migrate.js"]
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/indexer
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  indexer:
+    build: .
+    command: ["node", "apps/indexer/dist/index.js"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/indexer
+      REDIS_URL: redis://redis:6379
+      RPC_URL: ${RPC_URL:?set RPC_URL in .env — see .env.example}
+      CHAIN_ID: ${CHAIN_ID:-1}
+      CONTRACT_ADDRESS: ${CONTRACT_ADDRESS:?set CONTRACT_ADDRESS in .env — see .env.example}
+      INDEXER_START_BLOCK: ${INDEXER_START_BLOCK:-0}
+      INDEXER_CHUNK_SIZE: ${INDEXER_CHUNK_SIZE:-2000}
+      INDEXER_POLL_INTERVAL_MS: ${INDEXER_POLL_INTERVAL_MS:-4000}
+      CONFIRMATIONS: ${CONFIRMATIONS:-5}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    build: .
+    command: ["node", "apps/api/dist/index.js"]
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/indexer
+      REDIS_URL: redis://redis:6379
+      CHAIN_ID: ${CHAIN_ID:-1}
+      API_PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:

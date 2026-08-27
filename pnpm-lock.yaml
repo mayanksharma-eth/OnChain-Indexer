@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@onchain-indexer/abi':
+        specifier: workspace:*
+        version: link:packages/abi
+      '@onchain-indexer/database':
+        specifier: workspace:*
+        version: link:packages/database
       '@onchain-indexer/utils':
         specifier: workspace:*
         version: link:packages/utils
@@ -90,6 +96,9 @@ importers:
 
   packages/config:
     dependencies:
+      viem:
+        specifier: ^2.21.54
+        version: 2.55.19(typescript@5.9.3)(zod@3.25.76)
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -112,8 +121,6 @@ importers:
       tsx:
         specifier: ^4.19.2
         version: 4.23.12
-
-  packages/types: {}
 
   packages/utils:
     dependencies:

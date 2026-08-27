@@ -202,6 +202,15 @@ describe("event processor: invalid transitions", () => {
   });
 });
 
+describe("event processor: validation", () => {
+  it("rejects IntentCreated with a deadline outside the safe-integer range", async () => {
+    const outOfRange = created({ deadline: 2n ** 200n });
+
+    await expect(processDecodedEvent(db, chainId, outOfRange)).rejects.toThrow(ProjectionError);
+    expect(await getIntent(db, chainId, INTENT_ID)).toBeUndefined();
+  });
+});
+
 describe("event processor: unknown events", () => {
   it("ignores a decoded event outside the known intent lifecycle", async () => {
     const unknown = { eventName: "SomeOtherEvent", raw: rawMeta(), args: {} } as unknown as DecodedIntentEvent;

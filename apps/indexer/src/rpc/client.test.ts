@@ -3,6 +3,8 @@ import { createRpcClient } from "./client.js";
 import { ChainIdMismatchError, RpcRetriesExhaustedError } from "./errors.js";
 import type { MinimalPublicClient } from "./client.js";
 
+const CONTRACT = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
+
 function fakePublicClient(overrides: Partial<MinimalPublicClient> = {}): MinimalPublicClient {
   return {
     getChainId: vi.fn().mockResolvedValue(31337),
@@ -20,7 +22,10 @@ describe("createRpcClient", () => {
       getLogs: vi.fn().mockResolvedValue([]),
     });
 
-    const client = await createRpcClient({ rpcUrl: "http://rpc.local", chainId: 31337 }, { publicClient });
+    const client = await createRpcClient(
+      { rpcUrl: "http://rpc.local", chainId: 31337, contractAddress: CONTRACT },
+      { publicClient },
+    );
 
     expect(await client.getChainId()).toBe(31337);
 
@@ -34,14 +39,14 @@ describe("createRpcClient", () => {
     expect(publicClient.getBlock).toHaveBeenCalledWith({ blockHash: "0xhash" });
 
     expect(await client.getLogs(1, 10)).toEqual([]);
-    expect(publicClient.getLogs).toHaveBeenCalledWith({ fromBlock: 1n, toBlock: 10n });
+    expect(publicClient.getLogs).toHaveBeenCalledWith({ address: CONTRACT, fromBlock: 1n, toBlock: 10n });
   });
 
   it("throws a structured ChainIdMismatchError when the RPC endpoint reports a different chain ID", async () => {
     const publicClient = fakePublicClient({ getChainId: vi.fn().mockResolvedValue(1) });
 
     await expect(
-      createRpcClient({ rpcUrl: "http://rpc.local", chainId: 31337 }, { publicClient }),
+      createRpcClient({ rpcUrl: "http://rpc.local", chainId: 31337, contractAddress: CONTRACT }, { publicClient }),
     ).rejects.toThrow(ChainIdMismatchError);
   });
 
@@ -50,7 +55,7 @@ describe("createRpcClient", () => {
     const publicClient = fakePublicClient({ getLogs: vi.fn().mockRejectedValue(failure) });
 
     const client = await createRpcClient(
-      { rpcUrl: "http://rpc.local", chainId: 31337, maxRetries: 0, baseDelayMs: 1 },
+      { rpcUrl: "http://rpc.local", chainId: 31337, contractAddress: CONTRACT, maxRetries: 0, baseDelayMs: 1 },
       { publicClient },
     );
 
@@ -68,7 +73,7 @@ describe("createRpcClient", () => {
 
     const start = Date.now();
     const client = await createRpcClient(
-      { rpcUrl: "http://rpc.local", chainId: 31337, maxRetries: 3, baseDelayMs: 10 },
+      { rpcUrl: "http://rpc.local", chainId: 31337, contractAddress: CONTRACT, maxRetries: 3, baseDelayMs: 10 },
       { publicClient },
     );
 
@@ -85,7 +90,7 @@ describe("createRpcClient", () => {
     const publicClient = fakePublicClient({ getBlock: vi.fn().mockRejectedValue(failure) });
 
     const client = await createRpcClient(
-      { rpcUrl: "http://rpc.local", chainId: 31337, maxRetries: 2, baseDelayMs: 1 },
+      { rpcUrl: "http://rpc.local", chainId: 31337, contractAddress: CONTRACT, maxRetries: 2, baseDelayMs: 1 },
       { publicClient },
     );
 

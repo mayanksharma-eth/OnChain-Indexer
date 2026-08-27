@@ -1,4 +1,10 @@
-import { createRedis, getCheckpoint, invalidateChainCache, type Database } from "@onchain-indexer/database";
+import {
+  createRedis,
+  getCheckpoint,
+  invalidateChainCache,
+  updateChainProgress,
+  type Database,
+} from "@onchain-indexer/database";
 import {
   indexerBlockLag,
   indexerBlocksProcessedTotal,
@@ -119,6 +125,9 @@ export async function runIndexerLoop(options: IndexerLoopOptions): Promise<void>
       indexerBlockLag.set({ chain_id: chainId }, latestBlock - indexedBlock);
       status.recordProgress({ chainHead: latestBlock, safeBlock, indexedBlock });
       status.setState(indexedBlock >= safeBlock ? "CAUGHT_UP" : "SYNCING");
+      // Keeps `chains.latestBlock`/`indexedBlock` in sync with what indexer_checkpoints (the
+      // actual checkpoint of record) just settled on, so the two never drift apart.
+      await updateChainProgress(db, chainId, { latestBlock, indexedBlock });
 
       logger.info("poll cycle complete", {
         checkpoint: checkpoint?.lastProcessedBlock ?? null,

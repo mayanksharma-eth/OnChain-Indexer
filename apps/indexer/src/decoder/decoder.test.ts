@@ -41,7 +41,7 @@ function buildLog(encoded: { data: `0x${string}`; topics: [`0x${string}`, ...`0x
     logIndex: 2,
     removed: false,
     ...overrides,
-  } as Log;
+  };
 }
 
 describe("decodeIntentLog", () => {
@@ -66,8 +66,11 @@ describe("decodeIntentLog", () => {
       eventName: "IntentCreated",
       args: {
         intentId: INTENT_ID,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.stringMatching is typed `any`
         owner: expect.stringMatching(/^0x/i),
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.stringMatching is typed `any`
         tokenIn: expect.stringMatching(/^0x/i),
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.stringMatching is typed `any`
         tokenOut: expect.stringMatching(/^0x/i),
         amountIn: 1_000n,
         minAmountOut: 900n,
@@ -100,6 +103,7 @@ describe("decodeIntentLog", () => {
     const decoded = decodeIntentLog(buildLog(encoded));
 
     expect(decoded?.eventName).toBe("IntentCancelled");
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- expect.stringMatching is typed `any`
     expect(decoded?.args).toEqual({ intentId: INTENT_ID, owner: expect.stringMatching(/^0x/i) });
   });
 

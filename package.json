@@ -20,7 +20,9 @@
     "postinstall": "pnpm --filter './packages/**' build"
   },
   "dependencies": {
-    "@onchain-indexer/utils": "workspace:*"
+    "@onchain-indexer/utils": "workspace:*",
+    "@onchain-indexer/database": "workspace:*",
+    "@onchain-indexer/abi": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.3",

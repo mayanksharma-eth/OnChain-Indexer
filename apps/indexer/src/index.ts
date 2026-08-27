@@ -10,8 +10,12 @@ const INDEXER_NAME = "events";
 async function main() {
   const config = loadIndexerConfig();
   const db = createDb(config.DATABASE_URL);
-  const redis = createRedis(config.REDIS_URL);
-  const client = await createRpcClient({ rpcUrl: config.RPC_URL, chainId: config.CHAIN_ID });
+  const redis = config.REDIS_URL ? createRedis(config.REDIS_URL) : null;
+  const client = await createRpcClient({
+    rpcUrl: config.RPC_URL,
+    chainId: config.CHAIN_ID,
+    contractAddress: config.CONTRACT_ADDRESS,
+  });
 
   const controller = new AbortController();
   const requestShutdown = (signal: string) => {
@@ -38,7 +42,7 @@ async function main() {
   } finally {
     logger.info("final indexer status", { ...indexerStatus.getSnapshot() });
     await db.$client.end();
-    await redis.quit();
+    await redis?.quit();
     logger.info("shut down cleanly");
   }
 }

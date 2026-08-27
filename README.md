@@ -297,6 +297,20 @@ pnpm lint
 pnpm build
 ```
 
+### Demo: real chain, real events
+
+`tests/integration` exercises the indexer against a scripted mock chain. To see it index a real
+chain instead — a real Anvil node, a real deployed contract, real `IntentCreated`/`IntentFilled`
+transactions — run:
+
+```bash
+./demo/run.sh
+```
+
+It prints the exact `.env` values and `pnpm` commands to point the indexer/API above at it. See
+[demo/README.md](demo/README.md) — that directory is a fixture for driving this demo, not part
+of the indexer/API product.
+
 Or run the whole stack in containers:
 
 ```bash
@@ -352,5 +366,6 @@ packages/
   database/   # Postgres (drizzle) schema, migrations, repositories, Redis cache-aside
   abi/        # contract ABIs (viem)
   utils/      # logger, Prometheus metrics
-tests/        # cross-app integration tests
+tests/        # cross-app integration tests (scripted mock chain)
+demo/         # demo fixture only — real Anvil chain + contract to drive an E2E run, see demo/README.md
 ```

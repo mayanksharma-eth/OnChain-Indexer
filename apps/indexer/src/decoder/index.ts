@@ -6,3 +6,5 @@ export type {
   IntentFilledEvent,
   RawLogMeta,
 } from "./events.js";
+export { decodeCowLog, decodeCowLogs } from "./cow-decoder.js";
+export type { DecodedCowEvent, CowTradeEvent, CowSettlementEvent, CowOrderInvalidatedEvent } from "./cow-events.js";

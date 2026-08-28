@@ -20,7 +20,7 @@ export async function setupTestDb(): Promise<void> {
   migrated ??= migrate(db, { migrationsFolder });
   await migrated;
   await db.execute(
-    sql`TRUNCATE TABLE fills, intents, events, blocks, indexer_checkpoints, chains RESTART IDENTITY CASCADE`,
+    sql`TRUNCATE TABLE fills, intents, cow_trades, cow_settlements, cow_order_events, events, blocks, indexer_checkpoints, chains RESTART IDENTITY CASCADE`,
   );
 }
 

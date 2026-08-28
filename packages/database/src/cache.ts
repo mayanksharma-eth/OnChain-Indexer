@@ -8,6 +8,8 @@ export const cacheKeys = {
   solverState: (chainId: number) => `${CACHE_KEY_PREFIX}:solver:state:${chainId}`,
   openIntents: (chainId: number) => `${CACHE_KEY_PREFIX}:intents:open:${chainId}`,
   indexerStatus: (chainId: number) => `${CACHE_KEY_PREFIX}:indexer:status:${chainId}`,
+  cowStats: (chainId: number) => `${CACHE_KEY_PREFIX}:cow:stats:${chainId}`,
+  cowRecentSettlements: (chainId: number) => `${CACHE_KEY_PREFIX}:cow:settlements:recent:${chainId}`,
 };
 
 export type CacheLogger = (event: "hit" | "miss", key: string) => void;
@@ -55,6 +57,17 @@ export async function invalidateChainCache(redis: Redis | null, chainId: number)
   if (!redis) return;
   try {
     await redis.del(cacheKeys.solverState(chainId), cacheKeys.openIntents(chainId), cacheKeys.indexerStatus(chainId));
+  } catch {
+    // best-effort
+  }
+}
+
+/** CoW-adapter counterpart to invalidateChainCache — called from the CoW indexer loop after each
+ * successfully persisted range. */
+export async function invalidateCowCache(redis: Redis | null, chainId: number): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.del(cacheKeys.cowStats(chainId), cacheKeys.cowRecentSettlements(chainId));
   } catch {
     // best-effort
   }

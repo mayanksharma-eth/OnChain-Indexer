@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "pnpm --filter @onchain-indexer/api dev",
     "dev:indexer": "pnpm --filter @onchain-indexer/indexer dev",
+    "dev:indexer:cow": "pnpm --filter @onchain-indexer/indexer dev:cow",
     "db:generate": "pnpm --filter @onchain-indexer/database db:generate",
     "db:migrate": "pnpm --filter @onchain-indexer/database db:migrate",
     "build": "pnpm -r build",

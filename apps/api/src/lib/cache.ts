@@ -6,6 +6,8 @@ export const CACHE_TTL_SECONDS = {
   solverState: 2,
   openIntents: 2,
   indexerStatus: 1,
+  cowStats: 2,
+  cowRecentSettlements: 2,
 } as const;
 
 function devLogger(nodeEnv: string): CacheLogger | undefined {

@@ -1,8 +1,21 @@
 # Solver Indexer
 
-A solver-oriented EVM indexer for an intent protocol: it watches one contract's `IntentCreated` /
-`IntentCancelled` / `IntentFilled` events, projects them into queryable intent/fill state, and
-serves that state over a cache-backed HTTP API a solver can poll.
+A solver-oriented EVM indexing infrastructure with two things built on top of it:
+
+1. **A generic indexer** (`apps/indexer`, `apps/api`, `packages/database`) — chunked backfill,
+   confirmation-based finality, bounded reorg detection/rollback, transactional checkpointing,
+   idempotent persistence, and a cache-backed Fastify API. Protocol-agnostic: it doesn't know
+   what a "trade" or "intent" is, only how to fetch/decode/persist logs safely.
+2. **Two protocol adapters** built on that infrastructure:
+   - **Demo intent protocol** (`apps/indexer/src/index.ts`) — a toy `IntentCreated` /
+     `IntentCancelled` / `IntentFilled` contract, used for the local Anvil demo below.
+   - **CoW Protocol adapter** (`apps/indexer/src/index-cow.ts`) — a real integration against
+     CoW Protocol's onchain settlement contract. See
+     [CoW Protocol Adapter](#cow-protocol-adapter) below.
+
+Each adapter runs as its own indexer process against the same generic infrastructure, and
+checkpoints independently (`indexer_checkpoints` is keyed `(chainId, indexerName)`), so both can
+run against the same chain/Postgres without colliding.
 
 ## Problem
 
@@ -119,9 +132,13 @@ RPC → ingestion → decoding → persistence → domain projection → API →
 | `intents`               | Current derived state per intent (`OPEN`/`CANCELLED`/`FILLED`), one row per `(chain_id, intent_id)`. Amounts are `numeric(78,0)` to hold a full uint256 without precision loss. Rewritten in place as new events arrive — this is a materialized view of `events`, not independent history. |
 | `fills`                 | One row per `IntentFilled` event, keyed `(chain_id, transaction_hash, log_index)`. A `fills.intent_id` foreign key ties it to its intent. |
 | `indexer_checkpoints`   | One row per `(chain_id, indexer_name)`: the last block number + hash successfully committed. The single source of truth for where indexing resumes and how far reorg detection compares against. |
+| `cow_settlements`      | CoW adapter: one row per `Settlement` event (one per `settle()` call), keyed `(chain_id, transaction_hash)`. Records which solver executed the transaction. |
+| `cow_trades`           | CoW adapter: one row per `Trade` event (one per order matched in a settlement's batch), keyed `(chain_id, transaction_hash, log_index)`, FK to `cow_settlements`. |
+| `cow_order_events`     | CoW adapter: one row per `OrderInvalidated` event (an onchain order cancellation), keyed `(chain_id, transaction_hash, log_index)`. |
 
-`blocks`/`events` are the immutable raw layer; `intents`/`fills` are the queryable domain layer
-derived from it. A reorg rewinds both layers together, in one transaction — see
+`blocks`/`events` are the immutable raw layer; `intents`/`fills` (demo protocol) and
+`cow_settlements`/`cow_trades`/`cow_order_events` (CoW adapter) are the queryable domain layers
+derived from it. A reorg rewinds every layer together, in one transaction — see
 [Reorg Strategy](#reorg-strategy).
 
 ## Indexing Strategy
@@ -196,6 +213,12 @@ never claims freshness the returned rows don't actually have (see
 | `GET /api/v1/intents/:intentId/fills`   | Fills for one intent, oldest first.                                                |
 | `GET /api/v1/addresses/:address/intents`| Intents owned by an address (same filters/pagination as `/intents` minus `owner`). |
 | `GET /api/v1/solver/state`              | Aggregate counts: open/filled/cancelled intents, total fills.                      |
+| `GET /api/v1/cow/settlements`           | Paginated settlement list. Query: `solver`, `fromBlock`, `toBlock`, `limit`, `cursor`. `indexedBlock` here reads the CoW adapter's own checkpoint (`cow-events`), independent of the intent stream's. |
+| `GET /api/v1/cow/settlements/:transactionHash` | One settlement plus the trades executed in it. `404` if unknown. |
+| `GET /api/v1/cow/trades`                | Paginated trade list. Query: `owner`, `orderUid`, `fromBlock`, `toBlock`, `limit`, `cursor`. |
+| `GET /api/v1/cow/trades/:orderUid`      | Execution history for one order UID — every trade that matched it, oldest first (partial fills across separate settlements show up as separate rows). |
+| `GET /api/v1/cow/solvers/:address`      | Paginated settlement list for one solver (same shape as `/cow/settlements?solver=`). |
+| `GET /api/v1/cow/stats`                 | Aggregate counts: total settlements, total trades, top 10 solvers by settlement count. Cached (2s TTL). |
 | `GET /metrics`                          | Prometheus metrics (unprefixed — not under `/api/v1`).                             |
 
 ### Examples
@@ -321,6 +344,149 @@ docker compose up --build
 This builds `apps/api` and `apps/indexer` images, runs migrations once (`migrate` service), then
 starts Postgres, Redis, the indexer, and the API (`http://localhost:3000`).
 
+## CoW Protocol Adapter
+
+A real protocol integration on top of the generic infrastructure above, not a second copy of it.
+
+```
+Ethereum (or any chain CoW Protocol is deployed to)
+    │
+    ▼
+CoW Protocol's GPv2Settlement contract (0x9008D19f58AAbD9eD0D60971565AA8510560ab41 — the same
+    │                                    deterministic address on every supported chain)
+    ▼
+Trade / Settlement / OrderInvalidated events
+    │
+    ▼
+Generic EVM indexer  (apps/indexer/src/{fetcher,pipeline,reorg,checkpoint} — unmodified,
+    │                  shared with the demo intent protocol)
+    ▼
+CoW Protocol adapter  (apps/indexer/src/{decoder,projection}/cow-*.ts — this is the only
+    │                   protocol-specific code)
+    ▼
+PostgreSQL  (cow_settlements / cow_trades / cow_order_events)
+    │
+    ▼
+REST API  (GET /api/v1/cow/*)
+    │
+    ▼
+Solver / analytics consumer
+```
+
+### What's indexed, and why
+
+Verified against the contract source directly (`GPv2Settlement.sol` + its `GPv2Signing` mixin on
+[cowprotocol/contracts](https://github.com/cowprotocol/contracts), cross-checked against
+[docs.cow.fi](https://docs.cow.fi/cow-protocol/reference/contracts/core)), not guessed:
+
+| Event | Indexed? | Why |
+| --- | --- | --- |
+| `Trade(address indexed owner, address sellToken, address buyToken, uint256 sellAmount, uint256 buyAmount, uint256 feeAmount, bytes orderUid)` | ✅ | The actual order execution — sell/buy tokens and amounts for one matched order. |
+| `Settlement(address indexed solver)` | ✅ | Which authorized solver executed the batch. |
+| `OrderInvalidated(address indexed owner, bytes orderUid)` | ✅ | An onchain order cancellation. |
+| `Interaction(address indexed target, uint256 value, bytes4 selector)` | ❌ | Internal call-trace metadata (an arbitrary external call the settlement made), not order or solver data — indexing it would multiply row volume for no query value. |
+| `PreSignature(address indexed owner, bytes orderUid, bool signed)` | ❌ | Offchain order pre-sign bookkeeping, not settlement execution. |
+
+`GPv2Settlement` is deployed at the same address on Ethereum mainnet, Gnosis Chain, Arbitrum,
+Base, and every other chain CoW Protocol supports — point `CONTRACT_ADDRESS` at it with the
+matching `CHAIN_ID`/`RPC_URL` and the adapter works unchanged on any of them.
+
+**Order UID**: CoW's 56-byte packed `orderUid` (`orderDigest[32] || owner[20] || validTo[4]`, per
+`GPv2Order.packOrderUidParams`) is stored as a `0x`-prefixed 112-hex-char string, unmodified from
+the event data.
+
+### Onchain execution state, not the offchain orderbook
+
+**This indexes the onchain settlement layer only.** Be precise about what that does and doesn't
+mean:
+
+- ✅ Which solver executed which settlement transaction, when.
+- ✅ Which orders were actually matched/filled onchain, at what price, in which transaction.
+- ✅ Onchain order cancellations (`OrderInvalidated`).
+- ✅ Partial-fill history for one order UID, if the parts were filled in separate settlements
+  (each shows up as its own `cow_trades` row).
+- ❌ **Not** the offchain CoW orderbook. Order creation, quoting, and most cancellations happen
+  offchain via CoW's API and are never emitted onchain — this indexer cannot see an order that
+  was created and never settled.
+- ❌ **Not** a guarantee that `orderUid` fully identifies "one order" the way `intents.intent_id`
+  does for the demo protocol — it's whatever the settling solver submitted as that field.
+
+### Why this fits the existing architecture without changing it
+
+The generic pieces (RPC client, block-range chunking/retries, checkpointing, confirmation-based
+finality, reorg ancestor-finding) are reused as-is — see `apps/indexer/src/pipeline/cow-*.ts` and
+`apps/indexer/src/fetcher/cow-fetcher.ts`, which are structurally identical to their intent-protocol
+counterparts but decode/project against the CoW ABI instead. The one shared function that
+previously hardcoded the intent protocol's rollback (`handleReorg` in `apps/indexer/src/reorg/reorg.ts`)
+now takes the rollback function as a parameter (defaulting to the intent protocol's, so the demo
+is unaffected) — that's the only change to previously-existing generic code. Everything else CoW
+adds is new files.
+
+Run it as a **second, independent indexer process** against the same chain/Postgres — the schema
+was already `(chainId, indexerName)`-scoped for exactly this:
+
+```bash
+# same DATABASE_URL/REDIS_URL/RPC_URL/CHAIN_ID as the main indexer
+CONTRACT_ADDRESS=0x9008D19f58AAbD9eD0D60971565AA8510560ab41 pnpm dev:indexer:cow
+```
+
+or in Docker: `docker compose --profile cow up cow-indexer` once `COW_CONTRACT_ADDRESS` (and
+optionally `COW_START_BLOCK`) are set in `.env` (see `.env.example`).
+
+### Real CoW mainnet validation
+
+No mocked RPC, no fabricated events — indexing a real, already-final block range straight from a
+real Ethereum node:
+
+```bash
+docker compose up -d postgres redis   # or use a local Postgres/Redis
+pnpm db:migrate
+RUN_REAL_CHAIN_VALIDATION=1 pnpm vitest run tests/integration/cow-real-mainnet.test.ts
+```
+
+This connects to a free, no-API-key archive RPC (`eth.drpc.org` — most free RPCs, including
+`eth.llamarpc.com` in `.env.example`, only serve a recent-blocks window without a paid key) and
+indexes **Ethereum mainnet blocks 21,000,000–21,000,030**. That range was picked by directly
+querying `eth_getLogs` against the real `GPv2Settlement` contract before writing the test and
+confirming it deterministically contains **9 `Settlement` events and 11 `Trade` events across 8
+blocks** — old enough to be permanently final, so the assertion never flakes. The test then reads
+the result back through the real Fastify API (`GET /api/v1/cow/stats`,
+`GET /api/v1/cow/settlements`), not just the repository layer.
+
+Example of what actually got indexed from that run:
+
+```
+tx 0x74d28c0eb71543b9adc6052e4ba0a61e3a8ba3af89eaf7a9ab72d7a970476469, block 21000001
+  solver: 0x755BaE1cd46C9C27A3230AeF0CE923BDa13d29F7
+  trade:  owner 0x61956c07e2499d10a36b01E73bdf56B97Efb63AD
+          sold  26200000000000000000000 of 0xCb76314C2540199f4B844D4ebbC7998C604880cA
+          for   1262930015180346460 of 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE (ETH sentinel)
+```
+
+```bash
+curl http://localhost:3000/api/v1/cow/stats
+# {"success":true,"data":{"chainId":1,"totalSettlements":9,"totalTrades":11,
+#   "topSolvers":[{"solver":"0x008300082C3000009e63680088f8c7f4D3ff2E87","settlementCount":4}, ...]},
+#  "indexedBlock":21000030}
+
+curl "http://localhost:3000/api/v1/cow/settlements?fromBlock=21000000&toBlock=21000030"
+curl "http://localhost:3000/api/v1/cow/trades/0x0490b9003934d4ca6fe4b65fc54b45152622d41b06a2b6b07e6b9f1e1ecf8f7761956c07e2499d10a36b01e73bdf56b97efb63ad6713beea"
+```
+
+To index a different (or larger) range, edit `START_BLOCK`/`END_BLOCK` in that test file, or set
+`COW_VALIDATION_RPC_URL` to point at your own archive RPC.
+
+### Limitations specific to this adapter
+
+- Reads what's onchain only — see [Onchain execution state, not the offchain orderbook](#onchain-execution-state-not-the-offchain-orderbook) above.
+- `Interaction`/`PreSignature` events are not indexed (see table above) — a future consumer
+  needing them would extend `packages/abi/src/cow.ts` and the CoW decoder/projection files, not
+  the generic infrastructure.
+- No cross-chain aggregation — each chain's data is `chainId`-scoped, same as the rest of this
+  project; running CoW indexing on more than one chain is "run another `index-cow.ts` process
+  with a different `CHAIN_ID`/`RPC_URL`," same caveat as the existing multi-chain roadmap item
+  below.
+
 ## Production Roadmap
 
 **Implemented today:** single-chain indexing with chunked backfill + poll-forever sync,
@@ -359,13 +525,17 @@ calling it production-ready at real scale, the following are the natural next st
 
 ```
 apps/
-  indexer/    # the indexing process: rpc -> fetcher -> decoder -> pipeline -> reorg -> checkpoint
-  api/        # Fastify HTTP API (read-only)
+  indexer/    # rpc -> fetcher -> decoder -> pipeline -> reorg -> checkpoint (generic, protocol-agnostic)
+    src/index.ts       # demo intent protocol entry point
+    src/index-cow.ts   # CoW Protocol adapter entry point (run as a separate process)
+    src/{decoder,projection,fetcher,pipeline}/cow-*.ts  # the CoW-specific adapter code
+  api/        # Fastify HTTP API (read-only) — /api/v1/intents/* (demo), /api/v1/cow/* (CoW)
 packages/
-  config/     # env loading + validation (zod)
+  config/     # env loading + validation (zod) — shared by both protocols, no protocol-specific vars
   database/   # Postgres (drizzle) schema, migrations, repositories, Redis cache-aside
-  abi/        # contract ABIs (viem)
+  abi/        # contract ABIs (viem) — intent.ts (demo), cow.ts (verified CoW GPv2Settlement ABI)
   utils/      # logger, Prometheus metrics
-tests/        # cross-app integration tests (scripted mock chain)
+tests/        # cross-app integration tests: a scripted mock chain (demo protocol), and a real
+              # Ethereum mainnet run against CoW Protocol (cow-real-mainnet.test.ts)
 demo/         # demo fixture only — real Anvil chain + contract to drive an E2E run, see demo/README.md
 ```

@@ -35,9 +35,13 @@ export function okListAtBlock<T>(
   return { success: true, data, indexedBlock, nextCursor };
 }
 
-/** The only indexing stream this system runs (see apps/indexer/src/index.ts) — checkpoints are
- * keyed by (chainId, indexerName), so the API needs the same name to read them back. */
+/** The intent-protocol indexing stream (see apps/indexer/src/index.ts) — checkpoints are keyed
+ * by (chainId, indexerName), so the API needs the same name to read them back. */
 export const INDEXER_NAME = "events";
+
+/** The CoW-adapter indexing stream (see apps/indexer/src/index-cow.ts) — a separate checkpoint
+ * from INDEXER_NAME so the two protocols can run against the same chainId independently. */
+export const COW_INDEXER_NAME = "cow-events";
 
 /** Flips to true once app bootstrap (plugin/route registration) has finished — read by GET /ready. */
 export interface AppState {

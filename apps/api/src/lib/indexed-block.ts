@@ -9,7 +9,7 @@ import { INDEXER_NAME } from "./http.js";
  * understates freshness (a concurrent commit between the two reads can't be observed by the
  * later checkpoint read), never overstates it — so the response never claims a block newer than
  * what the returned rows might actually reflect. */
-export async function getIndexedBlock(db: Database, chainId: number): Promise<number | null> {
-  const checkpoint = await getCheckpoint(db, chainId, INDEXER_NAME);
+export async function getIndexedBlock(db: Database, chainId: number, indexerName: string = INDEXER_NAME): Promise<number | null> {
+  const checkpoint = await getCheckpoint(db, chainId, indexerName);
   return checkpoint?.lastProcessedBlock ?? null;
 }

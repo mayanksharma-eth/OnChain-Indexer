@@ -1,4 +1,4 @@
-import { getBlock, markEventsNonCanonical, markNonCanonical, type Database } from "@onchain-indexer/database";
+import { getBlock, markEventsNonCanonical, markNonCanonical, type Database, type DbOrTx } from "@onchain-indexer/database";
 import { indexerReorgsTotal, logger } from "@onchain-indexer/utils";
 import type { RpcClient } from "../rpc/client.js";
 import { advanceCheckpoint } from "../checkpoint/checkpoint-service.js";
@@ -57,6 +57,11 @@ async function findCommonAncestor(
  * all in one transaction. Re-fetching the new canonical blocks and replaying their events back
  * onto the checkpoint is the caller's job — it's just a normal indexing pass starting at
  * `affectedFrom` (see runIndexingPipeline), no separate replay machinery needed.
+ *
+ * `rollback` undoes the protocol-specific domain projection for the reorged range — defaults to
+ * the intent protocol's (see projection/rollback.ts). The CoW adapter passes
+ * `rollbackCowProjectionsFromBlock` instead; this is the one hook that makes reorg handling
+ * reusable across protocols without a second reorg implementation.
  */
 export async function handleReorg(
   db: Database,
@@ -64,6 +69,7 @@ export async function handleReorg(
   chainId: number,
   indexerName: string,
   divergentBlockNumber: number,
+  rollback: (tx: DbOrTx, chainId: number, fromBlockNumber: number) => Promise<void> = rollbackProjectionsFromBlock,
 ): Promise<ReorgResult> {
   const ancestor = await findCommonAncestor(db, client, chainId, divergentBlockNumber);
   const affectedFrom = ancestor.blockNumber + 1;
@@ -74,7 +80,7 @@ export async function handleReorg(
   await db.transaction(async (tx) => {
     const blocks = await markNonCanonical(tx, chainId, affectedFrom);
     const events = await markEventsNonCanonical(tx, chainId, affectedFrom);
-    await rollbackProjectionsFromBlock(tx, chainId, affectedFrom);
+    await rollback(tx, chainId, affectedFrom);
     await advanceCheckpoint(
       tx,
       { chainId, indexerName },

@@ -65,6 +65,36 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Optional: the CoW Protocol adapter, indexing GPv2Settlement instead of the demo intent
+  # contract. Not started by `docker compose up` by default — run explicitly with
+  # `docker compose --profile cow up cow-indexer` once COW_CONTRACT_ADDRESS is set (see
+  # .env.example). Same chainId/Postgres as `indexer`, checkpointed independently under
+  # indexerName "cow-events" (see packages/database's indexer_checkpoints).
+  cow-indexer:
+    build: .
+    profiles: ["cow"]
+    command: ["node", "apps/indexer/dist/index-cow.js"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/indexer
+      REDIS_URL: redis://redis:6379
+      RPC_URL: ${RPC_URL:?set RPC_URL in .env — see .env.example}
+      CHAIN_ID: ${CHAIN_ID:-1}
+      CONTRACT_ADDRESS: ${COW_CONTRACT_ADDRESS:?set COW_CONTRACT_ADDRESS in .env — see .env.example}
+      INDEXER_START_BLOCK: ${COW_START_BLOCK:-0}
+      INDEXER_CHUNK_SIZE: ${INDEXER_CHUNK_SIZE:-2000}
+      INDEXER_POLL_INTERVAL_MS: ${INDEXER_POLL_INTERVAL_MS:-4000}
+      CONFIRMATIONS: ${CONFIRMATIONS:-5}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
   api:
     build: .
     command: ["node", "apps/api/dist/index.js"]

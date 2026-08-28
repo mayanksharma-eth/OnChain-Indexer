@@ -22,6 +22,13 @@
       "when": 1787770518121,
       "tag": "0002_mysterious_natasha_romanoff",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787918755755,
+      "tag": "0003_absurd_champions",
+      "breakpoints": true
     }
   ]
 }

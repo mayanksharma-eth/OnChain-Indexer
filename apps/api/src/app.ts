@@ -7,6 +7,7 @@ import { registerIntentRoutes } from "./routes/intents.js";
 import { registerAddressRoutes } from "./routes/addresses.js";
 import { registerSolverRoutes } from "./routes/solver.js";
 import { registerIndexerStatusRoutes } from "./routes/indexer-status.js";
+import { registerCowRoutes } from "./routes/cow.js";
 import { AppError, type AppState, type RedisClient } from "./lib/http.js";
 
 export interface BuildAppOptions {
@@ -21,7 +22,9 @@ export interface BuildAppOptions {
 }
 
 export function buildApp({ db, redis, logLevel, state, chainId, nodeEnv = "production" }: BuildAppOptions): FastifyInstance {
-  const app = Fastify({ logger: { level: logLevel } });
+  // Default maxParamLength (100) is too short for a CoW orderUid path param (114 chars: 0x +
+  // 112 hex, see GET /cow/trades/:orderUid).
+  const app = Fastify({ logger: { level: logLevel }, maxParamLength: 200 });
 
   app.setNotFoundHandler((request, reply) => {
     reply.code(404).send({
@@ -84,6 +87,7 @@ export function buildApp({ db, redis, logLevel, state, chainId, nodeEnv = "produ
       registerAddressRoutes(instance, { db, chainId });
       registerSolverRoutes(instance, { db, chainId, redis, nodeEnv });
       registerIndexerStatusRoutes(instance, { db, chainId, redis, nodeEnv });
+      registerCowRoutes(instance, { db, chainId, redis, nodeEnv });
     },
     { prefix: "/api/v1" },
   );
